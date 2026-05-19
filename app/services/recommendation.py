@@ -1,10 +1,22 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from fastapi import HTTPException
 from app.schemas.product import RecommendationRequestSchema, UserInteractionSchema
 
 class RecommendationService:
     async def track_interaction(self, db: AsyncSession, interaction: UserInteractionSchema) -> dict:
-        # Catat perilaku pembeli (Implicit Feedback) ke database
+        # 1. Periksa apakah produk dengan ID tersebut benar-benar ada di database (Graceful Check)
+        product_check = await db.execute(
+            text("SELECT id FROM products WHERE id = :product_id"),
+            {"product_id": interaction.product_id}
+        )
+        if not product_check.first():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Gagal mencatat interaksi: Produk dengan ID '{interaction.product_id}' tidak ditemukan di database."
+            )
+
+        # 2. Catat perilaku pembeli (Implicit Feedback) ke database
         await db.execute(
             text("""
                 INSERT INTO user_interactions (user_id, product_id, interaction_type)
@@ -37,7 +49,7 @@ class RecommendationService:
                 """),
                 {"user_id": request.user_id}
             )
-            recent_product_ids = [row[0] for row in recent_result.all()]
+            recent_product_ids = [str(row[0]) for row in recent_result.all()]
 
         # 2. Parsing kueri dan filter stopwords percakapan bahasa Indonesia agar lebih presisi
         conversational_stopwords = {
@@ -63,12 +75,13 @@ class RecommendationService:
         
         # Jalankan kueri Full-Text Search menggunakan to_tsquery dan hitung skor ts_rank
         sql = text("""
-            SELECT id, name, description, price, rating, 
+            SELECT id, name, description, category_id, price, original_price, 
+                   image, rating, reviews, stock, in_stock, featured, tags,
                    ts_rank(search_vector, to_tsquery('indonesian', :query)) as fts_rank
               FROM products
              WHERE search_vector @@ to_tsquery('indonesian', :query)
-          ORDER BY fts_rank DESC
-             LIMIT :limit
+           ORDER BY fts_rank DESC
+              LIMIT :limit
         """)
         
         # Kita ambil 2x limit yang diminta untuk proses Heuristic Re-ranking di Python
@@ -86,7 +99,8 @@ class RecommendationService:
         
         scored_products = []
         for p in products_list:
-            p_id, name, desc, price, rating, fts_rank = p
+            p_id, name, desc, category_id, price, original_price, image, rating, reviews, stock, in_stock, featured, tags, fts_rank = p
+            p_id_str = str(p_id)
             
             # Normalisasi Rating (Skala 0.0 - 1.0)
             norm_rating = float(rating) / 5.0
@@ -101,17 +115,25 @@ class RecommendationService:
             # Personalisasi Booster (Implicit Feedback): 
             # Jika pembeli memiliki riwayat interaksi terbaru dengan produk ini, beri bonus skor +0.25!
             booster = 0.0
-            if p_id in recent_product_ids:
+            if p_id_str in recent_product_ids:
                 booster = 0.25
             
             final_score = base_score + booster
             
             scored_products.append({
-                "id": p_id,
+                "id": p_id_str,
                 "name": name,
                 "description": desc,
+                "category_id": category_id,
                 "price": float(price),
+                "original_price": float(original_price) if original_price is not None else None,
+                "image": image,
                 "rating": float(rating),
+                "reviews": reviews,
+                "stock": stock,
+                "in_stock": in_stock,
+                "featured": featured,
+                "tags": tags,
                 "fts_rank": float(fts_rank),
                 "personalization_boost": booster,
                 "final_score": round(final_score, 4)
@@ -134,5 +156,6 @@ class RecommendationService:
             "user_id": request.user_id,
             "results": results
         }
+
 
 recommendation_service = RecommendationService()

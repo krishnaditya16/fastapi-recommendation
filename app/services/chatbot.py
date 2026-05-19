@@ -12,11 +12,19 @@ class ChatbotService:
         
         products = search_results.get("results", [])
         
-        # 2. Susun konteks informasi produk
+        # 2. Susun konteks informasi produk dengan fitur transaksional lengkap
         context_lines = []
         for p in products:
+            stock_status = "Tersedia" if p.get("in_stock", True) else "Habis"
+            discount_info = ""
+            if p.get("original_price") and p["original_price"] > p["price"]:
+                discount_info = f" (Diskon aktif dari Rp{p['original_price']:,})"
+            
+            tags_str = ", ".join(p.get("tags", []))
+            tags_info = f" | Tag: {tags_str}" if tags_str else ""
+            
             context_lines.append(
-                f"- {p['name']} | Harga: Rp{p['price']:,} | Rating: {p['rating']}/5 | Deskripsi: {p['description']}"
+                f"- {p['name']} | Harga: Rp{p['price']:,}{discount_info} | Rating: {p['rating']}/5 | Stok: {stock_status} ({p.get('stock', 0)} pcs) | Deskripsi: {p['description']}{tags_info}"
             )
         context = "\n".join(context_lines) if context_lines else "Tidak ada produk yang cocok ditemukan."
 
@@ -25,23 +33,25 @@ class ChatbotService:
         if not api_key:
             # Fallback jika API Key OpenRouter belum dikonfigurasi
             return {
-                "response": f"Koneksi OpenRouter API tidak terdeteksi. Berikut adalah produk rekomendasi yang relevan berdasarkan kueri pencarian:\n\n{context}\n\n(Catatan: Harap konfigurasi OPENROUTER_API_KEY pada file .env untuk mengaktifkan asisten AI secara penuh).",
+                "response": f"Koneksi OpenRouter API tidak terdeteksi. Berikut adalah produk rekomendasi yang relevan berdasarkan kueri pencarian Kakak:\n\n{context}\n\n(Catatan: Harap konfigurasi OPENROUTER_API_KEY pada file .env untuk mengaktifkan asisten AI secara penuh).",
                 "source_products": products
             }
 
         prompt = f"""
-        Kita adalah asisten belanja AI profesional yang ramah dan interaktif untuk toko e-commerce kita.
-        Tugas kita adalah membantu menjawab pertanyaan pembeli berdasarkan data produk di bawah ini.
+        Kita adalah asisten belanja AI profesional yang ramah, persuasif, dan interaktif untuk toko e-commerce kita.
+        Tugas kita adalah membantu menjawab pertanyaan pembeli berdasarkan data katalog produk nyata di bawah ini.
 
         Pertanyaan Pembeli: "{user_query}"
 
-        Konteks Produk Rekomendasi Terkait:
+        Konteks Produk Rekomendasi Terkait dari Database:
         {context}
 
-        Aturan Penulisan:
-        - Gunakan bahasa Indonesia yang santun, interaktif, dan komunikatif.
-        - JANGAN menggunakan kata "Anda". Panggil pembeli dengan sapaan ramah "Kakak".
-        - Berikan ulasan singkat yang persuasif mengapa produk tersebut direkomendasikan berdasarkan rating atau faktor harga mereka.
+        Aturan Penulisan Respon:
+        - Gunakan bahasa Indonesia yang santun, interaktif, hangat, dan komunikatif.
+        - JANGAN PERNAH menggunakan kata "Anda". Panggil pembeli dengan sapaan hangat "Kakak".
+        - Rekomendasikan produk dari konteks di atas secara jujur dan persuasif.
+        - Manfaatkan informasi diskon aktif (original_price vs price), ulasan rating, atau sisa stok secara proaktif (misal: "Wah, ini sedang diskon lho Kak!", "Stoknya terbatas tinggal 50 saja Kak, jadi buruan diorder ya!").
+        - Jika stok habis (stock = 0 atau in_stock = false), informasikan dengan sopan dan rekomendasikan alternatif lain yang tersedia.
         """
 
         # Format standar request chat OpenRouter (seperti OpenAI API)

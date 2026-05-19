@@ -16,15 +16,35 @@ class ProductService:
             await db.execute(
                 text("""
                     UPDATE products 
-                    SET name = :name, description = :description, price = :price, rating = :rating
+                    SET name = :name, 
+                        description = :description, 
+                        category_id = :category_id,
+                        price = :price, 
+                        original_price = :original_price,
+                        image = :image,
+                        rating = :rating,
+                        reviews = :reviews,
+                        stock = :stock,
+                        in_stock = :in_stock,
+                        featured = :featured,
+                        tags = :tags,
+                        updated_at = CURRENT_TIMESTAMP
                     WHERE id = :id
                 """),
                 {
                     "id": product.id,
                     "name": product.name,
                     "description": product.description,
+                    "category_id": product.category_id,
                     "price": product.price,
-                    "rating": product.rating
+                    "original_price": product.original_price,
+                    "image": product.image,
+                    "rating": product.rating,
+                    "reviews": product.reviews,
+                    "stock": product.stock,
+                    "in_stock": product.in_stock,
+                    "featured": product.featured,
+                    "tags": product.tags
                 }
             )
             message = "Data produk berhasil diperbarui."
@@ -32,15 +52,29 @@ class ProductService:
             # Insert jika produk baru
             await db.execute(
                 text("""
-                    INSERT INTO products (id, name, description, price, rating)
-                    VALUES (:id, :name, :description, :price, :rating)
+                    INSERT INTO products (
+                        id, name, description, category_id, price, original_price, 
+                        image, rating, reviews, stock, in_stock, featured, tags, created_at, updated_at
+                    )
+                    VALUES (
+                        :id, :name, :description, :category_id, :price, :original_price, 
+                        :image, :rating, :reviews, :stock, :in_stock, :featured, :tags, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
                 """),
                 {
                     "id": product.id,
                     "name": product.name,
                     "description": product.description,
+                    "category_id": product.category_id,
                     "price": product.price,
-                    "rating": product.rating
+                    "original_price": product.original_price,
+                    "image": product.image,
+                    "rating": product.rating,
+                    "reviews": product.reviews,
+                    "stock": product.stock,
+                    "in_stock": product.in_stock,
+                    "featured": product.featured,
+                    "tags": product.tags
                 }
             )
             message = "Data produk berhasil disimpan."
@@ -58,3 +92,4 @@ class ProductService:
 
 
 product_service = ProductService()
+
